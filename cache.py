@@ -25,8 +25,10 @@ def format_as_timestamp(dt: datetime):
 class Cache:
 	"""
 	A class for caching files, backed by an SQLite database.
-	Functions can only be used in `with` statements which opens and
-	closes the database connection. `__enter__` returns self.
+	Cache functions can only be used with an active connection.
+	The connection can either be managed manually using the functions
+	`open` and `close` or using the cache instance in a `with` statement.
+	`__enter__` returns self.
 	"""
 
 	def __init__(self, db_file_name: str, table_name: str, folder_path: str):
@@ -41,6 +43,7 @@ class Cache:
 		self.table_name = table_name
 		self.folder_path = folder_path
 
+		self.connection = None
 		self._lock = threading.Lock()
 
 		with self:
@@ -48,13 +51,32 @@ class Cache:
 			self._init_folder()
 
 	def __enter__(self):
-		self.connection = sqlite3.connect(self.db_file_name)
+		self.open()
 		return self
 
 	def __exit__(self, exc_type, exc_value, traceback):
+		self.close()
+
+	def open(self):
+		"""
+		Opens the underlying database connection.
+		Raises exception if a connection exists.
+		"""
 		if self.connection is not None:
-			self.connection.close()
-			self.connection = None
+			raise Exception("Connection has already been opened.")
+
+		self.connection = sqlite3.connect(self.db_file_name)
+
+	def close(self):
+		"""
+		Closes the underlying database connection.
+		Raises exception if there is none.
+		"""
+		if self.connection is None:
+			raise Exception("There is no connection to close.")
+
+		self.connection.close()
+		self.connection = None
 
 	def add_file(self, key: str, file_path: str, target_file_name: str, copy_file=True):
 		"""
